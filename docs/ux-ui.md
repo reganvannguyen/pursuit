@@ -158,7 +158,10 @@ Proposed primary tabs:
 
 The Play tab acts as the main entry point into campaigns and missions.
 
-The exact Home and Profile content is still being explored.
+The exact layouts are still being explored, but the current distinction is:
+
+- **Home:** current and actionable information such as the most recent run, next objective, and continue/replay actions.
+- **Profile:** long-term identity and history such as totals, achievements, XP, clears, and run history.
 
 ### App Shell / Campaign Flow Mockup
 
@@ -285,7 +288,6 @@ Possible content:
 - short story setup
 - estimated distance
 - estimated duration
-- difficulty
 - threat level
 - Start Mission action
 
@@ -298,13 +300,13 @@ THE UNDERPASS
 
 A blocked highway. Movement below.
 
-Distance: 4.8 km
-Estimated Time: 28–32 min
+Approx. Distance: ~5 km
+Estimated Time: 28–35 min
 
 Difficulty
-Recon
-Tactical
-Survival
+Easy — Recon
+Medium — Tactical
+Hard — Survival
 
 START MISSION
 ```
@@ -415,6 +417,8 @@ The map can display:
 - starting location, if useful
 - chase distance
 
+Because this design now includes a live chase map, the technical stack will require a React Native-compatible map-rendering solution. This is still **visualization only**, not turn-by-turn navigation or route guidance. The exact mapping library remains to be selected during implementation.
+
 Example concept:
 
 ```text
@@ -516,7 +520,6 @@ A story choice may modify:
 - threat level
 - objective timer
 - future events
-- difficulty
 
 Example:
 
@@ -569,7 +572,7 @@ When a decision occurs:
 2. The phone may vibrate.
 3. A bottom sheet slides over the lower part of the map.
 4. Large choices are displayed.
-5. The player selects one.
+5. The player normally confirms one using a short voice command. The sheet visually reinforces the options and provides large tap targets for use when the player is safely stopped.
 6. The sheet disappears.
 
 Example:
@@ -590,18 +593,20 @@ Gate ahead. Which route will you take?
 └─────────────────────────────────┘
 ```
 
-The controls should be large enough to use while running.
+The controls should be large enough to use when safely stopped. While moving, voice is the primary interaction method.
 
 ## No Input
 
-The player may not always be able to interact.
+The player may not always be able to interact successfully.
 
-The final design should support a fallback such as:
+The agreed fallback direction is:
 
-- choosing a predefined default after a countdown
-- continuing onto a safe/default story branch
+- first allow a short retry using in-story radio-interference feedback
+- failed recognition must never cost health
+- after unsuccessful attempts, choose a predetermined safer/default branch
+- if voice input is unavailable, provide the same screen-based choice when the player is safely stopped
 
-The exact fallback behaviour is still to be decided.
+The exact retry count and timeout duration still need to be finalized through testing.
 
 ---
 
@@ -834,8 +839,8 @@ Avoid:
 
 The following areas still need more design work:
 
-- exact Home screen content
-- exact difference between Home and Profile
+- exact Home screen layout and information hierarchy
+- exact Profile screen layout and information hierarchy
 - campaign card layout
 - episode selection layout details
 - difficulty selection presentation
