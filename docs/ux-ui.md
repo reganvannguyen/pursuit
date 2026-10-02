@@ -160,6 +160,14 @@ The Play tab acts as the main entry point into campaigns and missions.
 
 The exact Home and Profile content is still being explored.
 
+### App Shell / Campaign Flow Mockup
+
+![App shell and campaign flow](images/app-shell-campaign-flow.png)
+
+This mockup shows the current direction for the clean app shell, including the bottom navigation with **Home**, **Play**, and **Profile**, followed by the transition into a heavily themed campaign and mission briefing experience.
+
+The exact layouts are still exploratory, but the separation between the clean app shell and campaign-specific presentation is intentional.
+
 ---
 
 # Play Screen
@@ -382,6 +390,21 @@ Its purpose is:
 
 It is not intended to provide navigation.
 
+### Map View Mockup
+
+![In-run map view](images/in-run-map-view.png)
+
+This mockup represents the current map-first in-run direction:
+
+- lives and threat remain visible at the top
+- distance, time, and pace stay glanceable
+- the map occupies most of the screen
+- the player's recorded route is visible
+- the pursuer follows the same route behind the player
+- route decisions appear temporarily as a bottom sheet rather than using permanent screen space
+
+> **Mockup note:** the image currently shows a checkpoint marker ahead of the player. That marker is **not part of the intended final design**. Because the app does not know the runner's future route, story checkpoints are progress-based and should not appear as geographic destinations on the map.
+
 ## Map Elements
 
 The map can display:
@@ -591,6 +614,12 @@ Its purpose is:
 > **How am I doing right now?**
 
 The map disappears and the available space is used for large, highly readable information.
+
+### Stats View Mockup
+
+![In-run stats view](images/in-run-stats-view.png)
+
+This mockup represents the alternate stats-focused screen. It keeps the same lives, threat, chase, and objective information while allowing distance, elapsed time, and pace to use much more of the screen.
 
 Possible layout:
 
