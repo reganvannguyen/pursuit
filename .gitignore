@@ -8,6 +8,7 @@ node_modules/
 dist/
 web-build/
 expo-env.d.ts
+coverage/
 
 # Native & Builds
 .kotlin/
@@ -52,4 +53,3 @@ Thumbs.db
 # Generated native folders (Continuous Native Generation)
 /ios
 /android
-
