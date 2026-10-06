@@ -8,7 +8,7 @@ Pursuit is an audio-led, offline-first outdoor running game where real-world mov
 1. Install dependencies
 
    ```bash
-   npm install
+   npm ci
    ```
 
 2. Start the app
@@ -30,6 +30,10 @@ In the output, you'll find options to open the app in a
 > ```
 
 This project runs completely offline and requires no backend server.
+
+## Build and test on a phone
+
+For repeatable iOS and Android device builds, the SQLite restart check, and the iOS launch-without-Metro check, follow the [development build setup](docs/development-builds.md).
 
 
 ## Get a fresh project

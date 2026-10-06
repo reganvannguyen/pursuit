@@ -63,7 +63,7 @@ export default function ProfileScreen() {
             0 total runs completed · 0.0 km recorded
           </ThemedText>
         </ThemedView>
-        {__DEV__ && Platform.OS !== 'web' ? (
+        {Platform.OS !== 'web' ? (
           <ThemedView type="backgroundElement" style={styles.card}>
             <ThemedText type="smallBold">SQLite storage check</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
