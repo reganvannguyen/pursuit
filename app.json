@@ -12,6 +12,7 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.regannguyen.pursuit",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -27,6 +28,12 @@
     "plugins": [
       "expo-router",
       "./plugins/withIosSceneLifecycle",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Pursuit uses your location to track the distance and route of an active run."
+        }
+      ],
       [
         "expo-splash-screen",
         {

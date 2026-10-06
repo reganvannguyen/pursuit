@@ -34,7 +34,29 @@ npx expo prebuild --clean
 npx expo run:ios --device
 ```
 
-Use `npx expo run:android --device` for an Android rebuild. Do not edit generated `ios/` or `android/` files directly; configure native changes in `app.json` or a config plugin.
+Use `npx expo run:android --device` for an Android rebuild. Do not edit generated `ios/` or `android/` files directly; configure native changes in `app.json`, `app.config.js`, or a config plugin.
+
+## Google Maps on Android
+
+Android uses Google Maps and needs a Google Maps API key before the basemap can load in a development or standalone build. Expo Go supplies its own key. iOS uses Apple Maps and does not need an app key.
+
+1. In Google Cloud, create or select a project, enable billing, and enable **Maps SDK for Android**.
+2. Create an API key. Restrict it to **Maps SDK for Android** and to Android apps with package ID `com.regannguyen.pursuit` plus the SHA-1 signing certificate fingerprint used by your build. For a local Android development build, `cd android && ./gradlew signingReport` prints the debug signing fingerprint. EAS builds use the fingerprint shown in the Expo project credentials.
+3. Put the key in a local `.env` file at the project root (this file is ignored by Git):
+
+   ```dotenv
+   ANDROID_GOOGLE_MAPS_API_KEY=your_restricted_key
+   ```
+
+   For an EAS build, configure the same variable in the EAS build environment. Do not use an `EXPO_PUBLIC_` prefix. The key is included in the Android app binary, so API and app restrictions are important.
+
+4. Rebuild after adding or changing the key:
+
+   ```bash
+   npx expo run:android --device
+   ```
+
+Without a configured key, the Android tracker still records GPS and distance and shows a setup message in place of the map. Map tiles may also be unavailable without an internet connection; GPS tracking remains active.
 
 ## Device checks
 
@@ -82,5 +104,7 @@ Keep the iPhone connected and unlocked so Xcode can sign and install the refresh
 - [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/)
 - [Expo development builds](https://docs.expo.dev/develop/development-builds/introduction/)
 - [Expo local app development](https://docs.expo.dev/guides/local-app-development/)
+- [Expo SDK 57 `react-native-maps` setup](https://docs.expo.dev/versions/v57.0.0/sdk/map-view/)
+- [Google Maps Platform: Set up the Maps SDK for Android](https://developers.google.com/maps/documentation/android-sdk/get-api-key)
 - [Enable iOS Developer Mode](https://docs.expo.dev/guides/ios-developer-mode/)
 - [Apple: Developer account and Personal Team](https://developer.apple.com/help/account/basics/about-your-developer-account)
