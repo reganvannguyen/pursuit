@@ -4,7 +4,9 @@ import {
   appendTrackingLocations,
   beginTrackingSession,
   clearTrackingSession,
+  pauseStoredTrackingSession,
   readTrackingSession,
+  resumeStoredTrackingSession,
 } from '@/database/storage.native';
 
 let mockSqliteDatabase: ReturnType<typeof createExpoDatabaseAdapter>;
@@ -62,7 +64,7 @@ describe('tracking session storage', () => {
     mockSqliteDatabase = createExpoDatabaseAdapter(database);
 
     try {
-      await beginTrackingSession('background');
+      await beginTrackingSession('background', 500);
       await appendTrackingLocations([
         { latitude: 49, longitude: -123, accuracy: 8, timestamp: 1_000 },
         { latitude: 49, longitude: -122.9999, accuracy: 7, timestamp: 11_000 },
@@ -80,7 +82,9 @@ describe('tracking session storage', () => {
       const returnedToApp = await readTrackingSession();
       expect(returnedToApp).toMatchObject({
         mode: 'background',
+        startedAt: 500,
         acceptedSamples: 4,
+        movingTimeMilliseconds: 30_000,
         route: [
           { latitude: 49, longitude: -123, segmentIndex: 0 },
           { latitude: 49, longitude: -122.9999, segmentIndex: 0 },
@@ -88,6 +92,35 @@ describe('tracking session storage', () => {
           { latitude: 49, longitude: -122.9997, segmentIndex: 0 },
         ],
       });
+
+      await pauseStoredTrackingSession(32_000);
+      await appendTrackingLocations([
+        { latitude: 49.1, longitude: -123, accuracy: 8, timestamp: 42_000 },
+      ]);
+      const paused = await readTrackingSession();
+      expect(paused).toMatchObject({
+        pausedAt: 32_000,
+        movingTimeMilliseconds: 30_000,
+        route: returnedToApp?.route,
+      });
+
+      await resumeStoredTrackingSession('background');
+      await appendTrackingLocations([
+        { latitude: 49.1, longitude: -123, accuracy: 8, timestamp: 43_000 },
+        { latitude: 49.1, longitude: -122.9999, accuracy: 8, timestamp: 53_000 },
+      ]);
+      const resumed = await readTrackingSession();
+      expect(resumed).toMatchObject({
+        mode: 'background',
+        pausedAt: null,
+        movingTimeMilliseconds: 40_000,
+        route: [
+          ...returnedToApp!.route,
+          { latitude: 49.1, longitude: -123, accuracy: 8, timestamp: 43_000, segmentIndex: 1 },
+          { latitude: 49.1, longitude: -122.9999, accuracy: 8, timestamp: 53_000, segmentIndex: 1 },
+        ],
+      });
+      expect(resumed!.distanceMeters - returnedToApp!.distanceMeters).toBeLessThan(10);
 
       await clearTrackingSession();
       expect(await readTrackingSession()).toBeNull();

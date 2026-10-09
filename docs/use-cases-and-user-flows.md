@@ -399,7 +399,7 @@ flowchart TD
     I -- No --> L[Explain recovery limitations; preserve any valid records]
 ```
 
-Whether tracking continues during a user-initiated **pause**, beyond elapsed time and already-recorded movement, requires a precise UI/engineering decision. What **is** fixed: the mission is frozen, no health is lost, and moving versus elapsed time must be clearly distinguished.
+For the Issue #9 tracker prototype, a user-initiated pause stops GPS sampling and freezes distance and moving time while overall elapsed time continues. The route recorded before the pause is retained. Resume begins a new route segment from the next GPS fix so no straight-line distance is added across the pause. Mission timers, challenge state, and health effects remain outside this tracker prototype; the fixed product rule is that a pause itself causes no health loss.
 
 ### UF-05 — Local results and optional sharing
 

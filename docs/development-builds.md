@@ -131,6 +131,25 @@ than a measured accuracy result.
 **Android physical test:** Unverified until an Android phone is available. Build configuration is
 enabled for background permission and the location foreground service.
 
+### Issue #9 session time, pace, and pause/resume
+
+The Play tracker shows elapsed time, GPS-derived moving time, a live pace estimate from the last
+60 seconds, and average moving pace. Moving time sums intervals between accepted GPS samples when
+the processor adds distance and the interval is at most 30 seconds. GPS drift can affect these
+estimates; no additional movement threshold is applied.
+
+**Pause** stops location updates and freezes route distance and moving time. Elapsed time continues.
+The route already recorded stays visible. **Resume** restarts location updates and treats the first
+new fix as a fresh route segment, so the paused interval does not add distance. **Stop** freezes the
+displayed totals and clears the active SQLite session; totals remain visible on the current Play
+screen until it is left, but this issue does not add saved run history.
+
+For a device check, start tracking, confirm elapsed time advances, and walk long enough to receive
+several accepted fixes. Pause for at least 30 seconds and confirm elapsed time continues while
+distance and moving time stay fixed. Resume and confirm the route does not bridge across the pause,
+then verify both pace values update after new movement. Stop and confirm the final totals remain on
+screen. Android behavior remains unverified until an Android phone is available.
+
 ## Free Apple Personal Team limit
 
 A paid Apple Developer Program membership is not required to build and test Pursuit on your own iPhone through Xcode's Personal Team. Apple's free Personal Team provisioning profiles expire seven days after issuance. After expiry, rebuild and reinstall the app from the connected Mac:

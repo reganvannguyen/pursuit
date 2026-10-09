@@ -6,6 +6,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { useGpsTracker } from '@/services/location/use-gps-tracker';
+import { formatDuration, formatPace } from '@/services/location/session-metrics';
 
 export default function PlayScreen() {
   const tracker = useGpsTracker();
@@ -14,23 +15,33 @@ export default function PlayScreen() {
     void tracker.start();
   }
 
+  function handlePause() {
+    void tracker.pause();
+  }
+
+  function handleResume() {
+    void tracker.resume();
+  }
+
   function handleStop() {
     void tracker.stop();
   }
 
   const status = tracker.error
     ? tracker.error
-    : tracker.isTracking
-      ? tracker.mode === 'background'
-        ? 'GPS updates are active while Pursuit is open, locked, or in the background.'
-        : 'GPS updates are active while Pursuit is open. Locking the phone may pause them.'
-      : tracker.isStarting
-        ? 'Waiting for the first GPS update…'
-        : tracker.mode === 'interrupted'
-          ? 'Tracking was interrupted. Start again to clear this route and begin a new session.'
-          : tracker.mode === 'idle' && tracker.route.length > 0
-            ? 'Tracking stopped. Start again to clear this route and begin a new session.'
-            : 'Tap Start to request location access and begin tracking.';
+    : tracker.isPaused
+      ? 'Tracking is paused. Elapsed time continues; route and moving time are frozen.'
+      : tracker.isTracking
+        ? tracker.mode === 'background'
+          ? 'GPS updates are active while Pursuit is open, locked, or in the background.'
+          : 'GPS updates are active while Pursuit is open. Locking the phone may pause them.'
+        : tracker.isStarting
+          ? 'Waiting for the first GPS update…'
+          : tracker.mode === 'interrupted'
+            ? 'Tracking was interrupted. Start again to clear this route and begin a new session.'
+            : tracker.mode === 'idle' && tracker.route.length > 0
+              ? 'Tracking stopped. Start again to clear this route and begin a new session.'
+              : 'Tap Start to request location access and begin tracking.';
 
   const modeLabel = {
     idle: 'Idle',
@@ -46,7 +57,8 @@ export default function PlayScreen() {
           <View style={styles.header}>
             <ThemedText type="subtitle">GPS tracker</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              The current route is saved on this device and cleared on Stop or the next Start.
+              The active route is saved on this device. Stop keeps the totals visible here and
+              clears the saved session.
             </ThemedText>
           </View>
 
@@ -61,6 +73,32 @@ export default function PlayScreen() {
               Sum of accepted GPS segments
             </ThemedText>
           </ThemedView>
+
+          <View style={styles.statsRow}>
+            <MetricCard
+              label="ELAPSED"
+              value={formatDuration(tracker.elapsedTimeMilliseconds)}
+              hint="Includes pauses"
+            />
+            <MetricCard
+              label="MOVING TIME"
+              value={formatDuration(tracker.movingTimeMilliseconds)}
+              hint="Accepted GPS movement"
+            />
+          </View>
+
+          <View style={styles.statsRow}>
+            <MetricCard
+              label="LIVE PACE"
+              value={formatPace(tracker.livePaceSecondsPerKilometer)}
+              hint="Last 60 seconds · estimate"
+            />
+            <MetricCard
+              label="AVG MOVING PACE"
+              value={formatPace(tracker.averagePaceSecondsPerKilometer)}
+              hint="Distance / moving time"
+            />
+          </View>
 
           <View style={styles.statsRow}>
             <MetricCard
@@ -118,31 +156,74 @@ export default function PlayScreen() {
           </ThemedView>
 
           <View style={styles.actions}>
+            {tracker.isTracking ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: tracker.isStarting }}
+                disabled={tracker.isStarting}
+                onPress={handlePause}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.startButton,
+                  tracker.isStarting && styles.disabledButton,
+                  pressed && styles.pressedButton,
+                ]}
+              >
+                <ThemedText style={styles.buttonText} type="smallBold">
+                  {tracker.isStarting ? 'Pausing…' : 'Pause'}
+                </ThemedText>
+              </Pressable>
+            ) : tracker.isPaused ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: tracker.isStarting }}
+                disabled={tracker.isStarting}
+                onPress={handleResume}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.startButton,
+                  tracker.isStarting && styles.disabledButton,
+                  pressed && styles.pressedButton,
+                ]}
+              >
+                <ThemedText style={styles.buttonText} type="smallBold">
+                  {tracker.isStarting ? 'Resuming…' : 'Resume'}
+                </ThemedText>
+              </Pressable>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: tracker.isStarting }}
+                disabled={tracker.isStarting}
+                onPress={handleStart}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.startButton,
+                  tracker.isStarting && styles.disabledButton,
+                  pressed && styles.pressedButton,
+                ]}
+              >
+                <ThemedText style={styles.buttonText} type="smallBold">
+                  {tracker.isStarting
+                    ? 'Starting…'
+                    : tracker.route.length > 0
+                      ? 'Start new'
+                      : 'Start'}
+                </ThemedText>
+              </Pressable>
+            )}
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ disabled: tracker.isStarting || tracker.isTracking }}
-              disabled={tracker.isStarting || tracker.isTracking}
-              onPress={handleStart}
-              style={({ pressed }) => [
-                styles.button,
-                styles.startButton,
-                (tracker.isStarting || tracker.isTracking) && styles.disabledButton,
-                pressed && styles.pressedButton,
-              ]}
-            >
-              <ThemedText style={styles.buttonText} type="smallBold">
-                {tracker.isStarting ? 'Starting…' : 'Start'}
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !tracker.isTracking }}
-              disabled={!tracker.isTracking}
+              accessibilityState={{
+                disabled: (!tracker.isTracking && !tracker.isPaused) || tracker.isStarting,
+              }}
+              disabled={(!tracker.isTracking && !tracker.isPaused) || tracker.isStarting}
               onPress={handleStop}
               style={({ pressed }) => [
                 styles.button,
                 styles.stopButton,
-                !tracker.isTracking && styles.disabledButton,
+                ((!tracker.isTracking && !tracker.isPaused) || tracker.isStarting) &&
+                  styles.disabledButton,
                 pressed && styles.pressedButton,
               ]}
             >
@@ -159,8 +240,8 @@ export default function PlayScreen() {
             {status}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" style={styles.accuracyNote}>
-            Background updates depend on device permissions and operating system behavior. Weak GPS
-            does not fail a run.
+            Moving time and pace are estimates from accepted GPS samples. Background updates depend
+            on permissions and operating system behavior; weak GPS does not fail a run.
           </ThemedText>
         </ScrollView>
       </SafeAreaView>

@@ -1,6 +1,6 @@
 import type * as SQLite from 'expo-sqlite';
 
-export const DATABASE_VERSION = 2;
+export const DATABASE_VERSION = 3;
 
 type MigrationDatabase = Pick<
   SQLite.SQLiteDatabase,
@@ -66,6 +66,15 @@ export async function migrateDatabase(database: MigrationDatabase): Promise<void
           timestamp INTEGER NOT NULL,
           segment_index INTEGER NOT NULL
         );
+      `);
+    }
+
+    if (transactionVersion < 3) {
+      await database.execAsync(`
+        ALTER TABLE active_tracking_session ADD COLUMN started_at INTEGER;
+        ALTER TABLE active_tracking_session ADD COLUMN paused_at INTEGER;
+        ALTER TABLE active_tracking_session
+          ADD COLUMN moving_time_milliseconds INTEGER NOT NULL DEFAULT 0;
       `);
     }
 

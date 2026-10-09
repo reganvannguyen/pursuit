@@ -1,6 +1,8 @@
 import {
   createTrackingSession,
+  pauseTrackingSession,
   processLocationBatch,
+  resumeTrackingSession,
   withTrackingWarning,
   type ActiveTrackingMode,
   type ProcessedLocationBatch,
@@ -31,8 +33,31 @@ export async function readProbeRecord(): Promise<ProbeRecord | null> {
   throw unsupportedStorageError();
 }
 
-export async function beginTrackingSession(mode: ActiveTrackingMode): Promise<void> {
-  webTrackingSession = { ...createTrackingSession(mode), route: [] };
+export async function beginTrackingSession(
+  mode: ActiveTrackingMode,
+  startedAt = Date.now(),
+): Promise<void> {
+  webTrackingSession = { ...createTrackingSession(mode, startedAt), route: [] };
+}
+
+export async function pauseStoredTrackingSession(pausedAt: number): Promise<void> {
+  if (webTrackingSession) {
+    webTrackingSession = {
+      ...webTrackingSession,
+      ...pauseTrackingSession(webTrackingSession, pausedAt),
+      route: webTrackingSession.route,
+    };
+  }
+}
+
+export async function resumeStoredTrackingSession(mode: ActiveTrackingMode): Promise<void> {
+  if (webTrackingSession) {
+    webTrackingSession = {
+      ...webTrackingSession,
+      ...resumeTrackingSession(webTrackingSession, mode),
+      route: webTrackingSession.route,
+    };
+  }
 }
 
 export async function setTrackingSessionMode(mode: ActiveTrackingMode): Promise<void> {
@@ -55,7 +80,9 @@ export async function markTrackingSessionInterrupted(warning: string): Promise<v
 export async function appendTrackingLocations(
   samples: LocationSample[],
 ): Promise<ProcessedLocationBatch | null> {
-  if (!webTrackingSession || samples.length === 0) return null;
+  if (!webTrackingSession || webTrackingSession.pausedAt !== null || samples.length === 0) {
+    return null;
+  }
 
   const processed = processLocationBatch(webTrackingSession, samples);
   webTrackingSession = {

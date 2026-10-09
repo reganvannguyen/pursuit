@@ -41,6 +41,12 @@ if (!TaskManager.isTaskDefined(BACKGROUND_LOCATION_TASK)) {
   TaskManager.defineTask<LocationTaskData>(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
     try {
       if (error) {
+        const session = await readTrackingSession();
+        if (session && session.pausedAt !== null) {
+          pendingSamples = [];
+          await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK).catch(() => undefined);
+          return;
+        }
         const warning = `Background GPS task failed: ${error.message}`;
         pendingSamples = [];
         console.error('[GPS tracker] Background task failed', error);
@@ -96,6 +102,8 @@ if (!TaskManager.isTaskDefined(BACKGROUND_LOCATION_TASK)) {
       pendingSamples = [];
       console.error('[GPS tracker] Could not process a background location batch', taskError);
       try {
+        const session = await readTrackingSession();
+        if (session && session.pausedAt !== null) return;
         await markTrackingSessionInterrupted(`Background GPS update failed: ${message}`);
         await publishSnapshot();
       } catch (storageError) {

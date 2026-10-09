@@ -1,5 +1,6 @@
 import {
   DistanceProcessor,
+  MAX_CONTIGUOUS_SAMPLE_GAP_MILLISECONDS,
   type LocationSample,
   type SampleRejectionReason,
 } from './distance-processor';
@@ -14,6 +15,9 @@ export type TrackedRoutePoint = LocationSample & {
 export type TrackingSessionCore = {
   mode: ActiveTrackingMode | 'interrupted';
   distanceMeters: number;
+  movingTimeMilliseconds: number;
+  startedAt: number | null;
+  pausedAt: number | null;
   accuracyMeters: number | null;
   acceptedSamples: number;
   rejectedSamples: number;
@@ -40,10 +44,16 @@ export type ProcessedLocationBatch = {
   rejections: SampleRejection[];
 };
 
-export function createTrackingSession(mode: ActiveTrackingMode): TrackingSessionCore {
+export function createTrackingSession(
+  mode: ActiveTrackingMode,
+  startedAt: number = Date.now(),
+): TrackingSessionCore {
   return {
     mode,
     distanceMeters: 0,
+    movingTimeMilliseconds: 0,
+    startedAt,
+    pausedAt: null,
     accuracyMeters: null,
     acceptedSamples: 0,
     rejectedSamples: 0,
@@ -64,6 +74,10 @@ export function processLocationBatch(
   current: TrackingSessionCore,
   samples: LocationSample[],
 ): ProcessedLocationBatch {
+  if (current.pausedAt !== null || current.mode === 'interrupted') {
+    return { session: current, acceptedPoints: [], rejections: [] };
+  }
+
   const processor = new DistanceProcessor({
     totalDistanceMeters: current.distanceMeters,
     lastAcceptedSample: current.lastAcceptedSample,
@@ -74,6 +88,7 @@ export function processLocationBatch(
   let accuracyMeters = current.accuracyMeters;
   let lastLocationAt = current.lastLocationAt;
   let rejectedSamples = current.rejectedSamples;
+  let movingTimeMilliseconds = current.movingTimeMilliseconds;
   let warning = current.warning;
 
   for (const sample of samples) {
@@ -89,6 +104,7 @@ export function processLocationBatch(
       lastLocationAt = Math.max(lastLocationAt ?? 0, sample.timestamp);
     }
 
+    const previousAcceptedSample = processor.getSnapshot().lastAcceptedSample;
     const result = processor.process(sample);
     if (!result.accepted) {
       rejectedSamples += 1;
@@ -102,6 +118,19 @@ export function processLocationBatch(
     }
 
     acceptedPoints.push({ ...sample, segmentIndex: result.segmentIndex });
+    if (
+      previousAcceptedSample &&
+      result.addedDistanceMeters > 0 &&
+      result.gapMilliseconds === undefined
+    ) {
+      const intervalMilliseconds = sample.timestamp - previousAcceptedSample.timestamp;
+      if (
+        intervalMilliseconds > 0 &&
+        intervalMilliseconds <= MAX_CONTIGUOUS_SAMPLE_GAP_MILLISECONDS
+      ) {
+        movingTimeMilliseconds += intervalMilliseconds;
+      }
+    }
     if (warning?.startsWith('No GPS update for')) warning = null;
     if (result.gapMilliseconds !== undefined) {
       warning = `GPS update gap of ${Math.ceil(result.gapMilliseconds / 1000)} seconds; some route distance may be missing.`;
@@ -113,6 +142,7 @@ export function processLocationBatch(
     session: {
       ...current,
       distanceMeters: processorSnapshot.totalDistanceMeters,
+      movingTimeMilliseconds,
       accuracyMeters,
       acceptedSamples: current.acceptedSamples + acceptedPoints.length,
       rejectedSamples,
@@ -123,6 +153,34 @@ export function processLocationBatch(
     },
     acceptedPoints,
     rejections,
+  };
+}
+
+export function pauseTrackingSession(
+  session: TrackingSessionCore,
+  pausedAt: number,
+): TrackingSessionCore {
+  return { ...session, pausedAt };
+}
+
+export function resumeTrackingSession(
+  session: TrackingSessionCore,
+  mode: ActiveTrackingMode,
+): TrackingSessionCore {
+  const warning =
+    session.warning?.startsWith('GPS update gap of') ||
+    session.warning?.startsWith('No GPS update for')
+      ? null
+      : session.warning;
+
+  return {
+    ...session,
+    mode,
+    pausedAt: null,
+    warning,
+    lastAcceptedSample: null,
+    lastLocationAt: null,
+    segmentIndex: session.segmentIndex + 1,
   };
 }
 
@@ -150,6 +208,8 @@ export function reconcileTrackingSession(
   backgroundTaskRegistered: boolean,
   now: number,
 ): TrackingSessionSnapshot {
+  if (session.pausedAt !== null) return session;
+
   if (session.mode === 'background' && !backgroundTaskRegistered) {
     return {
       ...session,
