@@ -15,10 +15,9 @@ function sample(
 
 describe('distance processor', () => {
   it('calculates distance between known coordinates', () => {
-    expect(distanceBetweenPoints({ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0.001 })).toBeCloseTo(
-      111.2,
-      0,
-    );
+    expect(
+      distanceBetweenPoints({ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 0.001 }),
+    ).toBeCloseTo(111.2, 0);
   });
 
   it('adds every accepted segment when a route returns near its start', () => {
@@ -78,5 +77,26 @@ describe('distance processor', () => {
       accepted: true,
       totalDistanceMeters: expect.any(Number),
     });
+  });
+
+  it('starts a new route segment after a long update gap without adding distance across it', () => {
+    const processor = new DistanceProcessor();
+    processor.process(sample(0, 0, 1_000));
+    processor.process(sample(0, 0.001, 11_000));
+
+    const resumed = processor.process(sample(0, 1, 42_000));
+
+    expect(resumed).toMatchObject({
+      accepted: true,
+      addedDistanceMeters: 0,
+      totalDistanceMeters: expect.any(Number),
+      segmentIndex: 1,
+      gapMilliseconds: 31_000,
+    });
+    expect(resumed.accepted && resumed.totalDistanceMeters).toBeCloseTo(111.2, 0);
+
+    const next = processor.process(sample(0, 1.0001, 52_000));
+    expect(next.accepted && next.segmentIndex).toBe(1);
+    expect(next.accepted && next.totalDistanceMeters).toBeGreaterThan(122);
   });
 });

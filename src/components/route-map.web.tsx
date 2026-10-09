@@ -1,10 +1,10 @@
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import type { RoutePoint } from '@/services/location/distance-processor';
+import type { TrackedRoutePoint } from '@/services/location/tracking-session';
 
 type RouteMapProps = {
-  points: RoutePoint[];
+  points: TrackedRoutePoint[];
   accuracyMeters: number | null;
 };
 

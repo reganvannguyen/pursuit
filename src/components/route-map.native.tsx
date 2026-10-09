@@ -4,10 +4,10 @@ import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import MapView, { Circle, Marker, Polyline, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
 import { ThemedText } from '@/components/themed-text';
-import type { RoutePoint } from '@/services/location/distance-processor';
+import type { TrackedRoutePoint } from '@/services/location/tracking-session';
 
 type RouteMapProps = {
-  points: RoutePoint[];
+  points: TrackedRoutePoint[];
   accuracyMeters: number | null;
 };
 
@@ -42,6 +42,15 @@ function ActiveRouteMap({ points, accuracyMeters }: RouteMapProps) {
   const startPoint = points[0]!;
   const currentLatitude = currentPoint.latitude;
   const currentLongitude = currentPoint.longitude;
+  const routeSegments = points.reduce<TrackedRoutePoint[][]>((segments, point) => {
+    const currentSegment = segments.at(-1);
+    if (!currentSegment || currentSegment[0]?.segmentIndex !== point.segmentIndex) {
+      segments.push([point]);
+    } else {
+      currentSegment.push(point);
+    }
+    return segments;
+  }, []);
 
   useEffect(() => {
     if (isFollowingRef.current) {
@@ -96,9 +105,16 @@ function ActiveRouteMap({ points, accuracyMeters }: RouteMapProps) {
         style={styles.map}
         toolbarEnabled={false}
       >
-        {points.length > 1 ? (
-          <Polyline coordinates={points} strokeColor="#208AEF" strokeWidth={4} />
-        ) : null}
+        {routeSegments.map((segment, index) =>
+          segment.length > 1 ? (
+            <Polyline
+              key={`${segment[0]?.segmentIndex ?? index}`}
+              coordinates={segment}
+              strokeColor="#208AEF"
+              strokeWidth={4}
+            />
+          ) : null,
+        )}
         {points.length === 1 ? (
           <Marker coordinate={startPoint} pinColor="#31A46C" title="Start and current point" />
         ) : (
@@ -149,7 +165,7 @@ function MapPlaceholder({ children }: { children: string }) {
   );
 }
 
-function regionAround(point: RoutePoint): Region {
+function regionAround(point: Pick<TrackedRoutePoint, 'latitude' | 'longitude'>): Region {
   return {
     latitude: point.latitude,
     longitude: point.longitude,

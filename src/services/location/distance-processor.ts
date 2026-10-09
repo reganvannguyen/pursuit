@@ -7,16 +7,22 @@ export type LocationSample = {
 
 export type RoutePoint = Pick<LocationSample, 'latitude' | 'longitude'>;
 
+export type DistanceProcessorSnapshot = {
+  totalDistanceMeters: number;
+  lastAcceptedSample: LocationSample | null;
+  segmentIndex: number;
+};
+
 export type SampleRejectionReason =
-  | 'invalid_sample'
-  | 'out_of_order_timestamp'
-  | 'impossible_speed';
+  'invalid_sample' | 'out_of_order_timestamp' | 'impossible_speed';
 
 export type SampleResult =
   | {
       accepted: true;
       addedDistanceMeters: number;
       totalDistanceMeters: number;
+      segmentIndex: number;
+      gapMilliseconds?: number;
     }
   | {
       accepted: false;
@@ -29,6 +35,7 @@ export type SampleResult =
 // This deliberately generous prototype guard catches obvious GPS jumps. Field data
 // should guide any later change to the limit.
 export const MAX_PLAUSIBLE_SPEED_METERS_PER_SECOND = 25;
+export const MAX_CONTIGUOUS_SAMPLE_GAP_MILLISECONDS = 30_000;
 
 const EARTH_RADIUS_METERS = 6_371_000;
 
@@ -45,8 +52,23 @@ export function distanceBetweenPoints(start: RoutePoint, end: RoutePoint): numbe
 }
 
 export class DistanceProcessor {
-  private lastAcceptedSample: LocationSample | null = null;
-  private totalDistanceMeters = 0;
+  private lastAcceptedSample: LocationSample | null;
+  private totalDistanceMeters: number;
+  private segmentIndex: number;
+
+  constructor(snapshot: DistanceProcessorSnapshot = EMPTY_PROCESSOR_SNAPSHOT) {
+    this.lastAcceptedSample = snapshot.lastAcceptedSample;
+    this.totalDistanceMeters = snapshot.totalDistanceMeters;
+    this.segmentIndex = snapshot.segmentIndex;
+  }
+
+  getSnapshot(): DistanceProcessorSnapshot {
+    return {
+      totalDistanceMeters: this.totalDistanceMeters,
+      lastAcceptedSample: this.lastAcceptedSample,
+      segmentIndex: this.segmentIndex,
+    };
+  }
 
   process(sample: LocationSample): SampleResult {
     if (!isValidSample(sample)) {
@@ -63,6 +85,23 @@ export class DistanceProcessor {
         accepted: false,
         rejectionReason: 'out_of_order_timestamp',
         totalDistanceMeters: this.totalDistanceMeters,
+      };
+    }
+
+    if (
+      previous &&
+      sample.timestamp - previous.timestamp > MAX_CONTIGUOUS_SAMPLE_GAP_MILLISECONDS
+    ) {
+      const gapMilliseconds = sample.timestamp - previous.timestamp;
+      this.lastAcceptedSample = sample;
+      this.segmentIndex += 1;
+
+      return {
+        accepted: true,
+        addedDistanceMeters: 0,
+        totalDistanceMeters: this.totalDistanceMeters,
+        segmentIndex: this.segmentIndex,
+        gapMilliseconds,
       };
     }
 
@@ -92,9 +131,16 @@ export class DistanceProcessor {
       accepted: true,
       addedDistanceMeters,
       totalDistanceMeters: this.totalDistanceMeters,
+      segmentIndex: this.segmentIndex,
     };
   }
 }
+
+const EMPTY_PROCESSOR_SNAPSHOT: DistanceProcessorSnapshot = {
+  totalDistanceMeters: 0,
+  lastAcceptedSample: null,
+  segmentIndex: 0,
+};
 
 function isValidSample(sample: LocationSample): boolean {
   return (

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,26 +9,35 @@ import { useGpsTracker } from '@/services/location/use-gps-tracker';
 
 export default function PlayScreen() {
   const tracker = useGpsTracker();
-  const [hasStarted, setHasStarted] = useState(false);
 
   function handleStart() {
-    setHasStarted(true);
     void tracker.start();
   }
 
   function handleStop() {
-    tracker.stop();
+    void tracker.stop();
   }
 
   const status = tracker.error
     ? tracker.error
     : tracker.isTracking
-      ? 'GPS updates are active while Pursuit is open.'
+      ? tracker.mode === 'background'
+        ? 'GPS updates are active while Pursuit is open, locked, or in the background.'
+        : 'GPS updates are active while Pursuit is open. Locking the phone may pause them.'
       : tracker.isStarting
         ? 'Waiting for the first GPS update…'
-        : hasStarted
-          ? 'Tracking stopped. Start again to clear this route and begin a new one.'
-          : 'Tap Start to request location access and begin a foreground route.';
+        : tracker.mode === 'interrupted'
+          ? 'Tracking was interrupted. Start again to clear this route and begin a new session.'
+          : tracker.mode === 'idle' && tracker.route.length > 0
+            ? 'Tracking stopped. Start again to clear this route and begin a new session.'
+            : 'Tap Start to request location access and begin tracking.';
+
+  const modeLabel = {
+    idle: 'Idle',
+    background: 'Background',
+    'foreground-only': 'Foreground only',
+    interrupted: 'Interrupted',
+  }[tracker.mode];
 
   return (
     <ThemedView style={styles.container}>
@@ -38,7 +46,7 @@ export default function PlayScreen() {
           <View style={styles.header}>
             <ThemedText type="subtitle">GPS tracker</ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Foreground prototype. The route stays in memory and is not saved.
+              The current route is saved on this device and cleared on Stop or the next Start.
             </ThemedText>
           </View>
 
@@ -66,6 +74,18 @@ export default function PlayScreen() {
               hint="Accepted / rejected"
             />
           </View>
+
+          <ThemedView type="backgroundElement" style={styles.modeCard}>
+            <ThemedText type="smallBold">Tracking mode: {modeLabel}</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Last GPS update: {formatLastUpdate(tracker.lastLocationAt)}
+            </ThemedText>
+            {tracker.warning ? (
+              <ThemedText style={styles.warning} type="small">
+                {tracker.warning}
+              </ThemedText>
+            ) : null}
+          </ThemedView>
 
           <ThemedView type="backgroundElement" style={styles.mapCard}>
             <ThemedText type="smallBold">Route map</ThemedText>
@@ -139,7 +159,8 @@ export default function PlayScreen() {
             {status}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" style={styles.accuracyNote}>
-            Accuracy is shown for field testing. Weak GPS does not fail a run.
+            Background updates depend on device permissions and operating system behavior. Weak GPS
+            does not fail a run.
           </ThemedText>
         </ScrollView>
       </SafeAreaView>
@@ -176,6 +197,10 @@ function formatAccuracy(accuracyMeters: number | null): string {
   return accuracyMeters === null ? '—' : `± ${Math.round(accuracyMeters)} m`;
 }
 
+function formatLastUpdate(timestamp: number | null): string {
+  return timestamp === null ? 'Waiting for a location' : new Date(timestamp).toLocaleTimeString();
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -206,6 +231,11 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: Spacing.two,
+  },
+  modeCard: {
+    padding: Spacing.three,
+    borderRadius: Spacing.three,
+    gap: Spacing.one,
   },
   metricCard: {
     flex: 1,
@@ -284,6 +314,9 @@ const styles = StyleSheet.create({
   },
   error: {
     color: '#D45C4A',
+  },
+  warning: {
+    color: '#C88B2D',
   },
   accuracyNote: {
     marginTop: -Spacing.two,
