@@ -12,6 +12,7 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.regannguyen.pursuit",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -26,7 +27,18 @@
     },
     "plugins": [
       "expo-router",
+      "expo-sqlite",
       "./plugins/withIosSceneLifecycle",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Pursuit uses your location to track the distance and route of an active run.",
+          "locationAlwaysAndWhenInUsePermission": "Pursuit needs Always location access to record your route while your phone is locked or the app is in the background.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
       [
         "expo-splash-screen",
         {
