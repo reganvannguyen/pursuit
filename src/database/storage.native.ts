@@ -5,7 +5,9 @@ import { isSQLiteBusyError } from './sqlite-errors';
 import type { ProbeRecord } from './storage';
 import {
   createTrackingSession,
+  pauseTrackingSession as pauseSession,
   processLocationBatch,
+  resumeTrackingSession as resumeSession,
   type ActiveTrackingMode,
   type ProcessedLocationBatch,
   type TrackingSessionCore,
@@ -24,6 +26,9 @@ let databaseOperationQueue = Promise.resolve();
 type TrackingSessionRow = {
   mode: TrackingSessionCore['mode'];
   distance_meters: number;
+  moving_time_milliseconds: number;
+  started_at: number | null;
+  paused_at: number | null;
   accuracy_meters: number | null;
   accepted_samples: number;
   rejected_samples: number;
@@ -60,6 +65,9 @@ function rowToSessionCore(row: TrackingSessionRow): TrackingSessionCore {
   return {
     mode: row.mode,
     distanceMeters: row.distance_meters,
+    movingTimeMilliseconds: row.moving_time_milliseconds,
+    startedAt: row.started_at,
+    pausedAt: row.paused_at,
     accuracyMeters: row.accuracy_meters,
     acceptedSamples: row.accepted_samples,
     rejectedSamples: row.rejected_samples,
@@ -150,10 +158,13 @@ export function readProbeRecord(): Promise<ProbeRecord | null> {
   });
 }
 
-export function beginTrackingSession(mode: ActiveTrackingMode): Promise<void> {
+export function beginTrackingSession(
+  mode: ActiveTrackingMode,
+  startedAt = Date.now(),
+): Promise<void> {
   return enqueueDatabaseOperation(async () => {
     const database = await openDatabase();
-    const session = createTrackingSession(mode);
+    const session = createTrackingSession(mode, startedAt);
 
     await database.withTransactionAsync(async () => {
       await database.runAsync('DELETE FROM active_tracking_point');
@@ -162,8 +173,9 @@ export function beginTrackingSession(mode: ActiveTrackingMode): Promise<void> {
         `INSERT INTO active_tracking_session (
           id, mode, distance_meters, accuracy_meters, accepted_samples, rejected_samples,
           last_accepted_latitude, last_accepted_longitude, last_accepted_accuracy,
-          last_accepted_timestamp, last_location_at, segment_index, warning
-        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          last_accepted_timestamp, last_location_at, segment_index, warning, started_at,
+          paused_at, moving_time_milliseconds
+        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         session.mode,
         session.distanceMeters,
         session.accuracyMeters,
@@ -176,8 +188,53 @@ export function beginTrackingSession(mode: ActiveTrackingMode): Promise<void> {
         null,
         session.segmentIndex,
         session.warning,
+        session.startedAt,
+        session.pausedAt,
+        session.movingTimeMilliseconds,
       );
     });
+  });
+}
+
+export function pauseStoredTrackingSession(pausedAt: number): Promise<void> {
+  return enqueueDatabaseOperation(async () => {
+    const database = await openDatabase();
+    const row = await database.getFirstAsync<TrackingSessionRow>(
+      'SELECT * FROM active_tracking_session WHERE id = 1',
+    );
+    if (!row || row.mode === 'interrupted' || row.paused_at !== null) return;
+
+    const pausedSession = pauseSession(rowToSessionCore(row), pausedAt);
+    await database.runAsync(
+      'UPDATE active_tracking_session SET paused_at = ? WHERE id = 1',
+      pausedSession.pausedAt,
+    );
+  });
+}
+
+export function resumeStoredTrackingSession(mode: ActiveTrackingMode): Promise<void> {
+  return enqueueDatabaseOperation(async () => {
+    const database = await openDatabase();
+    const row = await database.getFirstAsync<TrackingSessionRow>(
+      'SELECT * FROM active_tracking_session WHERE id = 1',
+    );
+    if (!row || row.paused_at === null || row.mode === 'interrupted') return;
+
+    const resumedSession = resumeSession(rowToSessionCore(row), mode);
+    await database.runAsync(
+      `UPDATE active_tracking_session SET
+        mode = ?, paused_at = NULL, last_accepted_latitude = ?, last_accepted_longitude = ?,
+        last_accepted_accuracy = ?, last_accepted_timestamp = ?, last_location_at = NULL,
+        segment_index = ?, warning = ?
+      WHERE id = 1`,
+      resumedSession.mode,
+      resumedSession.lastAcceptedSample?.latitude ?? null,
+      resumedSession.lastAcceptedSample?.longitude ?? null,
+      resumedSession.lastAcceptedSample?.accuracy ?? null,
+      resumedSession.lastAcceptedSample?.timestamp ?? null,
+      resumedSession.segmentIndex,
+      resumedSession.warning,
+    );
   });
 }
 
@@ -219,7 +276,7 @@ export function appendTrackingLocations(
       const row = await database.getFirstAsync<TrackingSessionRow>(
         'SELECT * FROM active_tracking_session WHERE id = 1',
       );
-      if (!row || row.mode === 'interrupted') return;
+      if (!row || row.mode === 'interrupted' || row.paused_at !== null) return;
 
       const processed = processLocationBatch(rowToSessionCore(row), samples);
       for (const point of processed.acceptedPoints) {
@@ -239,7 +296,8 @@ export function appendTrackingLocations(
         `UPDATE active_tracking_session SET
           mode = ?, distance_meters = ?, accuracy_meters = ?, accepted_samples = ?, rejected_samples = ?,
           last_accepted_latitude = ?, last_accepted_longitude = ?, last_accepted_accuracy = ?,
-          last_accepted_timestamp = ?, last_location_at = ?, segment_index = ?, warning = ?
+          last_accepted_timestamp = ?, last_location_at = ?, segment_index = ?, warning = ?,
+          moving_time_milliseconds = ?
         WHERE id = 1`,
         processed.session.mode,
         processed.session.distanceMeters,
@@ -253,6 +311,7 @@ export function appendTrackingLocations(
         processed.session.lastLocationAt,
         processed.session.segmentIndex,
         processed.session.warning,
+        processed.session.movingTimeMilliseconds,
       );
       processedBatch = processed;
     });
@@ -273,8 +332,17 @@ export function readTrackingSession(): Promise<TrackingSessionSnapshot | null> {
       'SELECT latitude, longitude, accuracy, timestamp, segment_index FROM active_tracking_point ORDER BY sequence ASC',
     );
 
+    const session = rowToSessionCore(row);
+    if (session.startedAt === null) {
+      session.startedAt = points[0]?.timestamp ?? row.last_location_at ?? Date.now();
+      await database.runAsync(
+        'UPDATE active_tracking_session SET started_at = ? WHERE id = 1 AND started_at IS NULL',
+        session.startedAt,
+      );
+    }
+
     return {
-      ...rowToSessionCore(row),
+      ...session,
       route: points.map(rowToRoutePoint),
     };
   });
