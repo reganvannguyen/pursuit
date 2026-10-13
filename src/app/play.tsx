@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -5,17 +6,36 @@ import { RouteMap } from '../components/route-map';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useTestNarration } from '@/services/audio/use-test-narration';
 import { useGpsTracker } from '@/services/location/use-gps-tracker';
 import { formatDuration, formatPace } from '@/services/location/session-metrics';
 
 export default function PlayScreen() {
   const tracker = useGpsTracker();
+  const narration = useTestNarration();
+  const { pause: pauseNarration, stop: stopNarration } = narration;
+  const previousTrackerState = useRef({
+    isTracking: tracker.isTracking,
+    isPaused: tracker.isPaused,
+  });
+
+  useEffect(() => {
+    const previous = previousTrackerState.current;
+    if (tracker.isPaused) pauseNarration();
+    else if (!tracker.isTracking && (previous.isTracking || previous.isPaused)) stopNarration();
+
+    previousTrackerState.current = {
+      isTracking: tracker.isTracking,
+      isPaused: tracker.isPaused,
+    };
+  }, [pauseNarration, stopNarration, tracker.isPaused, tracker.isTracking]);
 
   function handleStart() {
     void tracker.start();
   }
 
   function handlePause() {
+    pauseNarration();
     void tracker.pause();
   }
 
@@ -24,6 +44,7 @@ export default function PlayScreen() {
   }
 
   function handleStop() {
+    narration.stop();
     void tracker.stop();
   }
 
@@ -123,6 +144,60 @@ export default function PlayScreen() {
                 {tracker.warning}
               </ThemedText>
             ) : null}
+          </ThemedView>
+
+          <ThemedView type="backgroundElement" style={styles.audioCard}>
+            <ThemedText type="smallBold">Test narration</ThemedText>
+            <ThemedText type="small">
+              “This is a Pursuit audio check. GPS tracking is still active.”
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              {tracker.isPaused ? 'Resume tracking before playing.' : narration.message}
+            </ThemedText>
+            <View style={styles.audioActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{
+                  disabled: !tracker.isTracking || tracker.isStarting || !narration.isReady,
+                }}
+                disabled={!tracker.isTracking || tracker.isStarting || !narration.isReady}
+                onPress={() => {
+                  if (narration.isPlaying) narration.pause();
+                  else void narration.play();
+                }}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.startButton,
+                  (!tracker.isTracking || tracker.isStarting || !narration.isReady) &&
+                    styles.disabledButton,
+                  pressed && styles.pressedButton,
+                ]}
+              >
+                <ThemedText style={styles.buttonText} type="smallBold">
+                  {narration.isPlaying ? 'Pause narration' : 'Play narration'}
+                </ThemedText>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{
+                  disabled: (!tracker.isTracking && !tracker.isPaused) || tracker.isStarting,
+                }}
+                disabled={(!tracker.isTracking && !tracker.isPaused) || tracker.isStarting}
+                onPress={narration.stop}
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.stopButton,
+                  ((!tracker.isTracking && !tracker.isPaused) || tracker.isStarting) &&
+                    styles.disabledButton,
+                  pressed && styles.pressedButton,
+                ]}
+              >
+                <ThemedText type="smallBold">Stop sample</ThemedText>
+              </Pressable>
+            </View>
+            <ThemedText type="small" themeColor="textSecondary">
+              Audio continues when the screen locks and lowers other audio while it plays.
+            </ThemedText>
           </ThemedView>
 
           <ThemedView type="backgroundElement" style={styles.mapCard}>
@@ -317,6 +392,15 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     borderRadius: Spacing.three,
     gap: Spacing.one,
+  },
+  audioCard: {
+    padding: Spacing.three,
+    borderRadius: Spacing.three,
+    gap: Spacing.two,
+  },
+  audioActions: {
+    flexDirection: 'row',
+    gap: Spacing.two,
   },
   metricCard: {
     flex: 1,

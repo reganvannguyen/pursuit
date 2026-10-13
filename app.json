@@ -28,6 +28,21 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
+      [
+        "expo-asset",
+        {
+          "assets": ["./assets/audio"]
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": true,
+          "enableBackgroundRecording": false
+        }
+      ],
       "./plugins/withIosSceneLifecycle",
       [
         "expo-location",
